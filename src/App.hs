@@ -1,19 +1,19 @@
 module App where
 
 import           ClassyPrelude
+import           Common.Types
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.State                  (lift, liftM)
 import           Data.String                          (fromString)
 import qualified Data.Text                            as T
 import qualified Data.Text.Lazy                       as L
-import           Database.Common                      (withConnection)
-import qualified Database.User                        as DB
-import           HTTP.Common                          (APIError (..), ActionM)
 import           Network.HTTP.Types.Status
 import           Network.Wai
 import           Network.Wai.Middleware.RequestLogger
-import qualified Service.User                         as HTTP
+import qualified User.Router                          as UserRouter
+import qualified User.SQLite                          as UserSQLite
+import           User.Types
 import           Web.Scotty.Trans
 
 newtype ScottyM a = ScottyM { runApp :: ScottyT APIError IO a } deriving (Functor, Applicative, Monad)
@@ -33,6 +33,11 @@ errorHandler (UnhandledError s) = do
 main :: IO ()
 main = scottyT 3000 id (runApp app)
 
+instance UserRouter.UserService ScottyM where
+  listUsers = UserSQLite.list
+  createUser = UserSQLite.create
+  getUserById = UserSQLite.find
+
 app :: ScottyM ()
 app = ScottyM $ do
 
@@ -40,8 +45,4 @@ app = ScottyM $ do
 
   middleware logStdout
 
-  get "/users/:id" $ do
-    id <- param "id"
-    user <- liftIO $ withConnection $ \conn -> DB.find conn id
-    text . L.pack . show $ HTTP.fromUser <$> user
-
+  UserRouter.routes
